@@ -1,53 +1,75 @@
-name: compile
+name: |
+  Linux: Build with CMake and gcc
 
 on: [push, pull_request]
 
+# When a PR is updated, cancel the jobs from the previous version.
+# Merges do not define head_ref, so use run_id to never cancel those
+# jobs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        release:
-        - "ubuntu:20.04"
-        - "ubuntu:22.04"
-        - "ubuntu:24.04"
-        - "ubuntu:rolling"
-        - "debian:oldstable-slim"
-        - "debian:stable-slim"
-        - "debian:testing-slim"
-        - "debian:unstable-slim"
+        container:
+          - "ubuntu:20.04"
+          - "ubuntu:22.04"
+          - "ubuntu:24.04"
+          - "ubuntu:26.04"
+          - "ubuntu:rolling"
+          - "debian:oldoldstable-slim"
+          - "debian:oldstable-slim"
+          - "debian:stable-slim"
+          - "debian:testing-slim"
+          - "debian:unstable-slim"
+        build_type:
+          - 'Debug'
+          - 'Release'
+
+    container:
+      image: ${{ matrix.container }}
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v6
 
-    - name: Prepare ${{ matrix.release }} container
+    - name: Install required tools
       run: |
-        podman version
-        podman run --name stable -di --userns=keep-id:uid=1000,gid=1000 -v "$PWD":/home -w /home ${{ matrix.release }} bash
-        podman exec -i stable uname -a
-        podman exec -i stable id
-        podman exec -i -u root stable apt update
-        podman exec -e DEBIAN_FRONTEND='noninteractive' -i -u root stable apt install -o APT::Install-Suggests=false -qy \
-                clang \
-                cmake \
-                gcc-arm-none-eabi \
-                git \
-                make
+        apt update
+        DEBIAN_FRONTEND='noninteractive' apt install -o APT::Install-Suggests=false -qy \
+          cmake \
+          gcc-arm-none-eabi \
+          git \
+          make \
+          wget
 
-    - name: Configure & Build with arm-none-eabi-gcc
-      env:
-        toolchain: arm-none-eabi-gcc
+    - name: Install newlib based toolchain (if required)
+      if:
+        matrix.container == 'debian:testing-slim' || matrix.container == 'debian:unstable-slim'
       run: |
-        podman exec -i stable cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_TOOLCHAIN_FILE=cmake/${toolchain}.cmake -B build-${toolchain}
-        podman exec -i stable cmake --build build-${toolchain}
+        ./cmake/install-debian-gcc-arm-none-eabi
+        echo "$PWD/arm-none-eabi_14.2.rel1-1/bin" >> ${GITHUB_PATH}
+
+    - name: Verify Toolchain Installation
+      run: |
+        cmake --version
+        arm-none-eabi-ld --version
+        arm-none-eabi-gcc --version
+
+    - name: Configure
+      run: |
+        cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DCMAKE_TOOLCHAIN_FILE="cmake/arm-none-eabi-gcc.cmake" -B "build"
+
+    - name: Build
+      run: |
+        cmake --build "build"
 
     - name: Show logs
       if: ${{ failure() }}
       run: |
-        for log in build-*/CMakeFiles/{CMakeOutput.log,CMakeConfigureLog.yaml}; do \
-                if [ -e ${log} ]; then \
-                        echo "---------------- ${log} ----------------"; \
-                        cat ${log}; \
-                fi; \
-        done
+        cat build/CMakeFiles/CMakeConfigureLog.yaml || true

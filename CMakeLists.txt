@@ -1,21 +1,133 @@
+#
+# The MIT License (MIT)
+#
+# Copyright (c) 2026 Marc Kleine-Budde <kernel@pengutronix.de>
+# Copyright (c) 2019 Hubert Denkmair
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
+#
+
 cmake_minimum_required(VERSION 3.13)
 project(candleLightFirmware C ASM)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(default_build_type "Release")
+
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+	message(STATUS "Setting build type to '${default_build_type}' as none was specified.")
+	set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE STRING "Choose the type of build." FORCE)
+
+	# Set the possible values for cmake-gui drop-down
+	set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release")
+endif()
+
+######## options
+
+option(ENABLE_SEMIHOSTING "Enable semihosting support for debugging" OFF)
+
+######## libc selection
+
+set(LIBC "auto" CACHE STRING "Embedded libc implementation")
+set_property(CACHE LIBC PROPERTY STRINGS "auto" "newlib")
+
+if(NOT LIBC MATCHES "^(auto|newlib)$")
+	message(FATAL_ERROR "Invalid LIBC '${LIBC}'. Choose: 'auto' 'newlib'.")
+endif()
+
+####### Verify selected libc matches the actual headers/toolchain
+
+include(CheckSymbolExists)
+
+check_symbol_exists(__PICOLIBC__ "sys/features.h" HAVE_PICOLIBC)
+check_symbol_exists(__NEWLIB__ "sys/features.h" HAVE_NEWLIB)
+
+if(HAVE_PICOLIBC)
+	message(FATAL_ERROR
+		"Picolibc is not yet supported. Please install a newlib based toolchain, see: "
+		"https://github.com/candle-usb/candleLight_fw/#building")
+elseif(HAVE_NEWLIB)
+	set(HAVE_LIBC "newlib")
+else()
+	message(FATAL_ERROR "Neither Picolibc nor Newlib detected.")
+endif()
+
+if(LIBC STREQUAL "auto")
+	message(STATUS "Autodetecting libc")
+	set(LIBC "${HAVE_LIBC}")
+	message(STATUS "Autodetecting libc - ${LIBC}")
+elseif(NOT LIBC STREQUAL HAVE_LIBC)
+	message(FATAL_ERROR "LIBC='${LIBC}' was selected, but not detected.")
+else()
+	message(STATUS "Using libc: ${LIBC}")
+endif()
+
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+	if(LIBC STREQUAL "newlib")
+		add_link_options(
+			-specs=nano.specs
+		)
+		if(ENABLE_SEMIHOSTING)
+			add_link_options(
+				-specs=rdimon.specs
+				-lrdimon
+			)
+		else()
+			add_link_options(
+				-specs=nosys.specs
+			)
+		endif()
+	endif()
+endif()
+
+######## semihosting
+
+if(ENABLE_SEMIHOSTING)
+	message(STATUS "Semihosting: enabled")
+	add_compile_definitions(CONFIG_SEMIHOSTING=1)
+else()
+	message(STATUS "Semihosting: disabled")
+endif()
+
+####### check linker not supporting "(READONLY)"
+
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL "11.0")
+	set(HAVE_READONLY TRUE CACHE INTERNAL "Linker supports (READONLY) keyword")
+	message(STATUS "Enabling linker (READONLY) flag")
+else()
+	set(HAVE_READONLY FALSE CACHE INTERNAL "Linker does not support (READONLY) keyword")
+	message(STATUS "Disabling Linker (READONLY) flag")
+endif()
+
+set(CMAKE_C_FLAGS_RELEASE "-O3")
+set(CMAKE_C_FLAGS_DEBUG "-O2")
+
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_DEBUG FALSE)
 
 add_compile_options(
-	--specs=nano.specs
-	--specs=nosys.specs
-	-O2
 	-Wall
 	-Werror
 	-Wextra
 	-Wstrict-prototypes
 	-fdata-sections
-	-ffat-lto-objects
 	-ffreestanding
 	-ffunction-sections
-	-flto
 	-fmessage-length=0
 	-fsigned-char
 	-g3
@@ -23,14 +135,14 @@ add_compile_options(
 	-std=gnu11
 )
 
-#need these later, per-platform
+add_compile_definitions(_FORTIFY_SOURCE=2)
+
+# need these later, per-platform
 set(CPUFLAGS_F0 -mcpu=cortex-m0)
 set(CPUFLAGS_F4 -mcpu=cortex-m4)
 set(CPUFLAGS_G0 -mcpu=cortex-m0)
 
 add_link_options(
-	--specs=nano.specs
-	--specs=nosys.specs
 	-Wall
 	-Wextra
 	-g3
@@ -43,11 +155,41 @@ add_subdirectory(libs/STM32_HAL)
 add_subdirectory(libs/STM32_USB_Device_Library)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_SOURCE_DIR}/cmake)
 
+# uncrustify - ignore HAL and third-party libs
+file(GLOB_RECURSE CHECK_SOURCE_FILES
+	"include/*.[ch]"
+	"src/*.[ch]"
+
+	"libs/STM32_HAL/config/hal_include.h"
+	"libs/STM32_USB_Device_Library/config/usbd_conf.h"
+)
+
+file(GLOB_RECURSE CHECK_EXTRA_FILES
+	".github/*"
+	"70-candle-usb.rules"
+	"LICENSE.md"
+	"README.md"
+	"cmake/*"
+	"gdb_oocd.cmds"
+	"ldscripts/*"
+	"openocd.cfg"
+)
+
+add_custom_target(uncrustify
+	COMMAND uncrustify -c "${CMAKE_CURRENT_SOURCE_DIR}/uncrustify.cfg" --replace --no-backup ${CHECK_SOURCE_FILES}
+	WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+	COMMENT "Formatting source code with Uncrustify..."
+)
+
+add_custom_target(codespell
+	COMMAND codespell -w ${CHECK_SOURCE_FILES} ${CHECK_EXTRA_FILES}
+	WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+	COMMENT "Spellchecking source code with Codespell..."
+)
 
 # Add a custom target that produces version.h, plus
 # a dummy output that's not actually produced, in order
 # to force version.hmake to always be re-run before the build
-
 
 add_custom_target(version_h
 	BYPRODUCTS "${CMAKE_CURRENT_BINARY_DIR}/version.h"
@@ -65,22 +207,24 @@ set(
 	include/usbd_gs_can.h src/usbd_gs_can.c
 	src/usbd_conf.c
 
+	include/board.h
 	include/can.h
 	include/can_common.h src/can_common.c
 	include/device.h
 	include/dfu.h src/dfu.c
 	include/gpio.h src/gpio.c
+	include/host_frame.h
 	include/led.h src/led.c
 	include/timer.h src/timer.c
 	include/util.h src/util.c
 
-	src/startup.c
-	src/main.c
 	src/interrupts.c
+	src/main.c
+	src/no-op.c
+	src/startup.c
 
 	${CMAKE_CURRENT_BINARY_DIR}/version.h
 )
-
 
 ####### some helpers to generate targets
 
@@ -111,7 +255,7 @@ find_package(DFUSuffix)
 function(dfu_flash target)
 	if (DFU_SUFFIX_EXECUTABLE)
 		add_custom_command(TARGET ${target}
-			DEPENDS ${target}
+			POST_BUILD
 			BYPRODUCTS ${target}.dfu
 			COMMAND ${CMAKE_OBJCOPY} -O binary ${target} ${target}.dfu
 			COMMAND ${DFU_SUFFIX_EXECUTABLE} --add ${target}.dfu --vid 1d50 --pid 606f 1>/dev/null
@@ -119,18 +263,16 @@ function(dfu_flash target)
 		)
 
 		add_custom_target(flash-${target}
-			dfu-util -a 0 -s 0x08000000:leave -D ${target}.dfu
+			${DFU_UTIL_EXECUTABLE} -a 0 -s 0x08000000:leave -D ${target}.dfu
 			DEPENDS ${target}.dfu
 		)
 	else()
 		add_custom_target(flash-${target}
-			dfu-util -d 1d50:606f -a 0 -s 0x08000000:leave -D ${target}.bin
+			${DFU_UTIL_EXECUTABLE} -d 1d50:606f -a 0 -s 0x08000000:leave -D ${target}.bin
 			DEPENDS ${target}.bin
 		)
 	endif()
 endfunction()
-
-
 
 ######### ldscripts are mostly identical.
 # There's many ways of handling this :
@@ -156,12 +298,24 @@ function(populate_ldscript)
 	set(multiValueArgs)
 	cmake_parse_arguments("${prefix}" "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
+	if(HAVE_READONLY)
+		set(LDV_READONLY "(READONLY)")
+	else()
+		set(LDV_READONLY "")
+	endif()
+
 	# now we should have function-scope vars like LDV_FLASH_SIZE etc.
+
+	set(TEMPLATE_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/ldscripts/ldscript_base.inc")
+	set(OUTPUT_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/${${prefix}_CPU_FAMILY}_processed.ld")
+
 	# Produce a new file in the current builddir
 
-	configure_file(ldscripts/ldscript_base.inc ${${prefix}_CPU_FAMILY}_processed.ld)
-endfunction()
+	configure_file("${TEMPLATE_SCRIPT}" "${OUTPUT_SCRIPT}" @ONLY)
 
+	add_custom_target(${${prefix}_CPU_FAMILY}_linker_script DEPENDS "${OUTPUT_SCRIPT}")
+	set(${${prefix}_CPU_FAMILY}_LINKER_SCRIPT "${OUTPUT_SCRIPT}" PARENT_SCOPE)
+endfunction()
 
 ##################
 # generate ldscripts for all supported targets.
@@ -211,7 +365,14 @@ function(add_target_common TGTNAME CPU_FAMILY)
 	add_executable(${TGTNAME}_fw ${SOURCE_FILES})
 	add_dependencies(${TGTNAME}_fw version_h)
 	target_include_directories(${TGTNAME}_fw PRIVATE include/ ${CMAKE_CURRENT_BINARY_DIR})
-	target_link_options(${TGTNAME}_fw PRIVATE -T ${CPU_FAMILY}_processed.ld LINKER:-Map=${TGTNAME}_fw.map)
+	add_dependencies(${TGTNAME}_fw ${CPU_FAMILY}_linker_script)
+	set_target_properties(${TGTNAME}_fw PROPERTIES
+		LINK_DEPENDS ${${CPU_FAMILY}_LINKER_SCRIPT}
+	)
+	target_link_options(${TGTNAME}_fw PRIVATE -T ${${CPU_FAMILY}_LINKER_SCRIPT} LINKER:-Map=${TGTNAME}_fw.map)
+	set_target_properties(${TGTNAME}_fw PROPERTIES
+		ADDITIONAL_CLEAN_FILES "${${CPU_FAMILY}_LINKER_SCRIPT};${TGTNAME}_fw.map"
+	)
 	make_bin_file(${TGTNAME}_fw)
 	dfu_flash(${TGTNAME}_fw)
 	show_object_size(${TGTNAME}_fw)
@@ -220,7 +381,8 @@ endfunction()
 function(add_f042_target TGTNAME)
 	add_target_common(${TGTNAME} STM32F042X6)
 	target_compile_options(${TGTNAME}_fw BEFORE PRIVATE ${CPUFLAGS_F0})
-	target_compile_definitions(${TGTNAME}_fw PRIVATE BOARD_${TGTNAME} STM32F0)
+	target_compile_definitions(${TGTNAME}_fw PRIVATE BOARD_${TGTNAME} STM32F0 CONFIG_BXCAN)
+	target_sources(${TGTNAME}_fw PRIVATE "src/boards/legacy.c")
 	target_sources(${TGTNAME}_fw PRIVATE "src/can/bxcan.c")
 	target_sources(${TGTNAME}_fw PRIVATE "src/device/device_f0.c")
 	target_link_options(${TGTNAME}_fw BEFORE PRIVATE ${CPUFLAGS_F0})
@@ -230,7 +392,8 @@ endfunction()
 function(add_f072_target TGTNAME)
 	add_target_common(${TGTNAME} STM32F072XB)
 	target_compile_options(${TGTNAME}_fw BEFORE PRIVATE ${CPUFLAGS_F0})
-	target_compile_definitions(${TGTNAME}_fw PRIVATE BOARD_${TGTNAME} STM32F0)
+	target_compile_definitions(${TGTNAME}_fw PRIVATE BOARD_${TGTNAME} STM32F0 CONFIG_BXCAN)
+	target_sources(${TGTNAME}_fw PRIVATE "src/boards/legacy.c")
 	target_sources(${TGTNAME}_fw PRIVATE "src/can/bxcan.c")
 	target_sources(${TGTNAME}_fw PRIVATE "src/device/device_f0.c")
 	target_link_options(${TGTNAME}_fw BEFORE PRIVATE ${CPUFLAGS_F0})
@@ -239,8 +402,9 @@ endfunction()
 
 function(add_f407_target TGTNAME)
 	add_target_common(${TGTNAME} STM32F407XE)
-	target_compile_definitions(${TGTNAME}_fw PRIVATE BOARD_${TGTNAME} STM32F4)
+	target_compile_definitions(${TGTNAME}_fw PRIVATE BOARD_${TGTNAME} STM32F4 CONFIG_BXCAN)
 	target_compile_options(${TGTNAME}_fw BEFORE PRIVATE ${CPUFLAGS_F4})
+	target_sources(${TGTNAME}_fw PRIVATE "src/boards/legacy.c")
 	target_sources(${TGTNAME}_fw PRIVATE "src/can/bxcan.c")
 	target_sources(${TGTNAME}_fw PRIVATE "src/device/device_f4.c")
 	target_link_options(${TGTNAME}_fw BEFORE PRIVATE ${CPUFLAGS_F4})
@@ -249,8 +413,9 @@ endfunction()
 
 function(add_g0b1_target TGTNAME)
 	add_target_common(${TGTNAME} STM32G0B1xx)
-	target_compile_definitions(${TGTNAME}_fw PRIVATE BOARD_${TGTNAME} STM32G0)
+	target_compile_definitions(${TGTNAME}_fw PRIVATE BOARD_${TGTNAME} STM32G0 CONFIG_M_CAN)
 	target_compile_options(${TGTNAME}_fw BEFORE PRIVATE ${CPUFLAGS_G0})
+	target_sources(${TGTNAME}_fw PRIVATE "src/can/m_can.c")
 	target_sources(${TGTNAME}_fw PRIVATE "src/device/device_g0.c")
 	target_link_options(${TGTNAME}_fw BEFORE PRIVATE ${CPUFLAGS_G0})
 	target_link_libraries(${TGTNAME}_fw PRIVATE STM32_HAL_STM32G0B1xx STM32_USB_Device_Library_STM32G0B1xx)
@@ -258,10 +423,31 @@ endfunction()
 
 ########## generate list of targets.
 # the "_fw" part is appended automatically
-set(TGTF042_LIST "cantact" "canalyze" "canable" "usb2can" "cannette")
-set(TGTF072_LIST "candleLight" "CANable_MKS" "CONVERTDEVICE_xCAN" "DSD_TECH_SH_C30A" "FYSETC_UCAN")
-set(TGTF407_LIST "STM32F4_DevBoard")
-set(TGTG0B1_LIST "budgetcan" "CONVERTDEVICE_xCANFD")
+
+set(TGTF042_LIST
+	"canable"
+	"canalyze"
+	"cannette"
+	"cantact"
+	"falcan"
+	"usb2can"
+)
+set(TGTF072_LIST
+	"CANable_MKS"
+	"CONVERTDEVICE_xCAN"
+	"DSD_TECH_SH_C30A"
+	"FYSETC_UCAN"
+	"RH02"
+	"can_module_com_classic"
+	"candleLight"
+)
+set(TGTF407_LIST
+	"STM32F4_DevBoard"
+)
+set(TGTG0B1_LIST
+	"CONVERTDEVICE_xCANFD"
+	"budgetcan"
+)
 
 foreach (TGTNAME IN LISTS TGTF042_LIST)
 	option(BUILD_${TGTNAME} "Build firmware for \"${TGTNAME}\" (default=yes)" ON)

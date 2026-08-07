@@ -1,41 +1,39 @@
 /*
-
-The MIT License (MIT)
-
-Copyright (c) 2016 Hubert Denkmair
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-
-*/
+ * The MIT License (MIT)
+ *
+ * Copyright (c) 2016 Hubert Denkmair
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ */
 
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 
+#include "board.h"
 #include "can.h"
 #include "can_common.h"
 #include "config.h"
 #include "device.h"
 #include "dfu.h"
 #include "gpio.h"
-#include "gs_usb.h"
-#include "hal_include.h"
 #include "led.h"
 #include "timer.h"
 #include "usbd_conf.h"
@@ -43,27 +41,19 @@ THE SOFTWARE.
 #include "usbd_def.h"
 #include "usbd_desc.h"
 #include "usbd_gs_can.h"
-#include "util.h"
 
-void HAL_MspInit(void);
-static void SystemClock_Config(void);
+void initialise_monitor_handles(void);
 
 static USBD_GS_CAN_HandleTypeDef hGS_CAN;
-static USBD_HandleTypeDef hUSB = {0};
-
-void __weak _close(void) {
-}
-void __weak _lseek(void) {
-}
-void __weak _read(void) {
-}
-void __weak _write(void) {
-}
+static USBD_HandleTypeDef hUSB;
 
 int main(void)
 {
+	if (IS_ENABLED(CONFIG_SEMIHOSTING))
+		initialise_monitor_handles();
+
 	HAL_Init();
-	SystemClock_Config();
+	device_sysclock_config();
 
 	gpio_init();
 	timer_init();
@@ -76,9 +66,10 @@ int main(void)
 	}
 
 	for (unsigned int i = 0; i < ARRAY_SIZE(hGS_CAN.channels); i++) {
+		const struct board_channel_config *channel_config = &config.channel[i];
 		can_data_t *channel = &hGS_CAN.channels[i];
 
-		channel->nr = i;
+		can_channel_set_nr(channel, i);
 
 		INIT_LIST_HEAD(&channel->list_from_host);
 
@@ -86,27 +77,21 @@ int main(void)
 				 LEDRX_GPIO_Port, LEDRX_Pin, LEDRX_Active_High,
 				 LEDTX_GPIO_Port, LEDTX_Pin, LEDTX_Active_High);
 
-		/* nice wake-up pattern */
-		for (uint8_t j = 0; j < 10; j++) {
-			HAL_GPIO_TogglePin(LEDRX_GPIO_Port, LEDRX_Pin);
-			HAL_Delay(50);
-			HAL_GPIO_TogglePin(LEDTX_GPIO_Port, LEDTX_Pin);
-		}
-
-		led_set_mode(&channel->leds, LED_MODE_OFF);
-
-		can_init(channel, CAN_INTERFACE);
-		can_disable(channel);
-
-#ifdef CAN_S_GPIO_Port
-		HAL_GPIO_WritePin(CAN_S_GPIO_Port, CAN_S_Pin, GPIO_PIN_RESET);
-#endif
+		can_init(channel, channel_config);
+		can_disable(&hGS_CAN, channel);
 	}
 
-	USBD_Init(&hUSB, (USBD_DescriptorsTypeDef*)&FS_Desc, DEVICE_FS);
+	USBD_Init(&hUSB, (USBD_DescriptorsTypeDef *)&FS_Desc, DEVICE_FS);
 	USBD_RegisterClass(&hUSB, &USBD_GS_CAN);
 	USBD_GS_CAN_Init(&hGS_CAN, &hUSB);
 	USBD_Start(&hUSB);
+
+	/* nice wake-up pattern */
+	for (uint8_t j = 0; j < 10; j++) {
+		HAL_GPIO_TogglePin(LEDRX_GPIO_Port, LEDRX_Pin);
+		HAL_Delay(50);
+		HAL_GPIO_TogglePin(LEDTX_GPIO_Port, LEDTX_Pin);
+	}
 
 	while (1) {
 		for (unsigned int i = 0; i < ARRAY_SIZE(hGS_CAN.channels); i++) {
@@ -131,22 +116,4 @@ int main(void)
 			dfu_run_bootloader();
 		}
 	}
-}
-
-void HAL_MspInit(void)
-{
-	__HAL_RCC_SYSCFG_CLK_ENABLE();
-#if defined(STM32F4)
-	__HAL_RCC_PWR_CLK_ENABLE();
-	__HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
-#elif defined(STM32G0)
-	__HAL_RCC_PWR_CLK_ENABLE();
-	HAL_PWREx_ControlVoltageScaling(PWR_REGULATOR_VOLTAGE_SCALE1);
-#endif
-	HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
-}
-
-void SystemClock_Config(void)
-{
-	device_sysclock_config();
 }

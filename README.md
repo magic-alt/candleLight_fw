@@ -16,6 +16,7 @@ This is firmware for certain STM32F042x/STM32F072xB-based USB-CAN adapters, nota
 - ConvertDevice-xCANFD: <https://github.com/ConvertDevice/xCANFD> (STM32G0B1CBT6)
 - DSD TECH SH-C30A: <https://www.deshide.com/product-details.html?pid=384242&_t=1671089557> (STM32F072xB)
 - FYSETC UCAN: <https://www.fysetc.com/products/fysetc-ucan-board-based-on-stm32f072-usb-to-can-adapter-support-with-canable-candlelight-klipper-firmware> (STM32F072xB)
+- FalCAN Probe: <https://github.com/AndersBNielsen/FalCAN> (STM32F042C6)
 
 Of important note is that the common STM32F103 will NOT work with this firmware because its hardware cannot use both USB and CAN simultaneously.
 Beware also the smaller packages in the F042 series which map a USB and CAN_TX signal on the same pin and are therefore unusable !
@@ -45,14 +46,29 @@ The Firmware also implements WCID USB descriptors and thus can be used on recent
 
 ## Building
 
-Building requires arm-none-eabi-gcc toolchain.
+Building requires a `newlib` based `arm-none-eabi-gcc` toolchain.
+Debian forky's `arm-none-eabi-gcc` toolchain switched to `picolibc`, but the candlelight firmware still requires `newlib`.
+
+On Debian trixie and older, install the standard `gcc-arm-none-eabi` toolchain:
 
 ```shell
 sudo apt-get install gcc-arm-none-eabi
+```
 
+For Debian forky and newer there is a script that downloads and install the latest `newlib` based toolchain and extract it to the current directory.
+Move it to `/opt` and `cmake` will automatically use it:
+
+```shell
+./cmake/install-debian-gcc-arm-none-eabi
+sudo mv arm-none-eabi_14.2.rel1-1 /opt
+```
+
+Now you're ready to build the firmware:
+
+```shell
 mkdir build
 cd build
-cmake .. -DCMAKE_TOOLCHAIN_FILE=../cmake/gcc-arm-none-eabi-8-2019-q3-update.cmake
+cmake .. -DCMAKE_TOOLCHAIN_FILE=../cmake/arm-none-eabi-gcc.cmake
 
 # or,
 # cmake-gui ..
@@ -69,7 +85,6 @@ make cantact_fw
 #
 # to list possible targets :
 make help
-
 ```
 
 ## Download Binaries
@@ -106,7 +121,7 @@ This can be useful when multiple devices are connected at the same time.
 
 An example configuration :
 
-```
+```shell
  $ cat /etc/systemd/network/60-persistent-candev.link
 [Match]
 Property=ID_MODEL=cannette_gs_usb ID_SERIAL_SHORT="003800254250431420363230"
@@ -121,12 +136,12 @@ Name=cannette99
 
 ( The serial number can be found with the `lsusb` utility). After reloading systemd units and resetting this board :
 
-```
+```shell
  $ ip a
-....
+...
 59: cannette99: <NOARP,ECHO> mtu 16 qdisc noop state DOWN group default qlen 10
     link/can
- $
+...
 ```
 
 
@@ -139,14 +154,19 @@ Name=cannette99
 - We include both a `.editorconfig` and `uncrustify.cfg` which should help with whitespace.
 
 Typical command to run uncrustify on all source files (ignoring HAL and third-party libs):
-`uncrustify -c ./uncrustify.cfg --replace --no-backup $(find include src -name "*.[ch]")`
+
+```shell
+make uncrustify
+```
 
 ### Profiling
 Not great on cortex-M0 cores (F042, F072 targets etc) since they lack hardware support (ITM and SWO). However, it's possible to randomly sample the program counter and get some coarse profiling info.
 
 For example, openocd has the `profile` command (see https://openocd.org/doc/html/General-Commands.html#Misc-Commands), e.g.
 
-```profile 5 test.out 0x8000000 0x8100000```
+```
+profile 5 test.out 0x8000000 0x8100000
+```
 
 (from inside gdb, the command needs to be prefixed with `monitor` to forward it to openocd, i.e. `monitor profile 5 .....`.
 

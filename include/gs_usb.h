@@ -1,28 +1,27 @@
 /*
-
-The MIT License (MIT)
-
-Copyright (c) 2016 Hubert Denkmair
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-
-*/
+ * The MIT License (MIT)
+ *
+ * Copyright (c) 2016 Hubert Denkmair
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ */
 
 #pragma once
 
@@ -30,66 +29,76 @@ THE SOFTWARE.
 
 #include "compiler.h"
 
-#define u32				   uint32_t
-#define u8				   uint8_t
+#define u32												  uint32_t
+#define u8												  uint8_t
 
-#define GSUSB_ENDPOINT_IN  0x81
-#define GSUSB_ENDPOINT_OUT 0x02
+#define GSUSB_ENDPOINT_IN								  0x81
+#define GSUSB_ENDPOINT_OUT								  0x02
 
-
-#define GS_CAN_MODE_NORMAL		  0
-#define GS_CAN_MODE_LISTEN_ONLY	  (1<<0)
-#define GS_CAN_MODE_LOOP_BACK	  (1<<1)
-#define GS_CAN_MODE_TRIPLE_SAMPLE (1<<2)
-#define GS_CAN_MODE_ONE_SHOT	  (1<<3)
-#define GS_CAN_MODE_HW_TIMESTAMP  (1<<4)
-/* #define GS_CAN_FEATURE_IDENTIFY              (1<<5) */
-/* #define GS_CAN_FEATURE_USER_ID               (1<<6) */
-#define GS_CAN_MODE_PAD_PKTS_TO_MAX_PKT_SIZE (1<<7)
-#define GS_CAN_MODE_FD						 (1<<8)    /* switch device to CAN-FD mode */
-/* #define GS_CAN_FEATURE_REQ_USB_QUIRK_LPC546XX (1<<9) */
-/* #define GS_CAN_FEATURE_BT_CONST_EXT          (1<<10) */
-/* #define GS_CAN_FEATURE_TERMINATION           (1<<11) */
-#define GS_CAN_MODE_BERR_REPORTING (1<<12)
-/* GS_CAN_FEATURE_GET_STATE (1<<13) */
-
-#define GS_CAN_FEATURE_LISTEN_ONLY				(1<<0)
-#define GS_CAN_FEATURE_LOOP_BACK				(1<<1)
-#define GS_CAN_FEATURE_TRIPLE_SAMPLE			(1<<2)
-#define GS_CAN_FEATURE_ONE_SHOT					(1<<3)
-#define GS_CAN_FEATURE_HW_TIMESTAMP				(1<<4)
-#define GS_CAN_FEATURE_IDENTIFY					(1<<5)
-#define GS_CAN_FEATURE_USER_ID					(1<<6)
-#define GS_CAN_FEATURE_PAD_PKTS_TO_MAX_PKT_SIZE (1<<7)
-#define GS_CAN_FEATURE_FD						(1<<8) /* device supports CAN-FD */
+#define GS_CAN_FEATURE_LISTEN_ONLY						  (1<<0)
+#define GS_CAN_FEATURE_LOOP_BACK						  (1<<1)
+#define GS_CAN_FEATURE_TRIPLE_SAMPLE					  (1<<2)
+#define GS_CAN_FEATURE_ONE_SHOT							  (1<<3)
+#define GS_CAN_FEATURE_HW_TIMESTAMP						  (1<<4)
+#define GS_CAN_FEATURE_IDENTIFY							  (1<<5)
+#define GS_CAN_FEATURE_USER_ID							  (1<<6)
+#define GS_CAN_FEATURE_PAD_PKTS_TO_MAX_PKT_SIZE			  (1<<7)
+#define GS_CAN_FEATURE_FD								  (1<<8) /* device supports CAN-FD */
 /* request workaround for LPC546XX erratum USB.15:
  * let host driver add a padding byte to each USB frame
  */
-#define GS_CAN_FEATURE_REQ_USB_QUIRK_LPC546XX	(1<<9)
+#define GS_CAN_FEATURE_REQ_USB_QUIRK_LPC546XX			  (1<<9)
 /* device supports separate bit timing constants for CAN-FD
  * arbitration and data phase, see:
  * GS_USB_BREQ_BT_CONST_EXT and struct gs_device_bt_const_extended
  */
-#define GS_CAN_FEATURE_BT_CONST_EXT				(1<<10)
+#define GS_CAN_FEATURE_BT_CONST_EXT						  (1<<10)
 /* device supports switchable termination, see:
  * - GS_USB_BREQ_SET_TERMINATION
  * - GS_USB_BREQ_GET_TERMINATION
  * - struct gs_device_termination_state
  */
-#define GS_CAN_FEATURE_TERMINATION				(1<<11)
-#define GS_CAN_FEATURE_BERR_REPORTING			(1<<12)
-#define GS_CAN_FEATURE_GET_STATE				(1<<13)
+#define GS_CAN_FEATURE_TERMINATION						  (1<<11)
+#define GS_CAN_FEATURE_BERR_REPORTING					  (1<<12)
+#define GS_CAN_FEATURE_GET_STATE						  (1<<13)
+#define GS_CAN_FEATURE_ELM_PROTOCOL						  (1<<14)
+/* supported by Elmue firmware until 0x260528 (including) */
+#define GS_CAN_FEATURE_ELM_DISABLE_TX_ECHO				  (1<<15)
+/* supported by Elmue firmware since 0x260529 */
+#define GS_CAN_FEATURE_ELM_DEV_FLAG_SEND_USB_BLOBS		  (1<<15)
+/* supported by Elmue firmware 0x260528 only */
+#define GS_CAN_FEATURE_ELM_DEV_FLAG_SEND_USB_BLOBS_260528 (1<<16)
+/* device supports HW filter, see:
+ * - GS_USB_BREQ_SET_FILTER,
+ * - GS_USB_BREQ_GET_FILTER,
+ * - struct gs_device_filter_info
+ * - struct gs_device_filter
+ */
+#define GS_CAN_FEATURE_FILTER							  (1<<16)
+/* device supports TDC configuration, see:
+ * - GS_USB_BREQ_GET_TDC_CONST
+ * - GS_USB_BREQ_SET_TDC
+ * - GS_USB_BREQ_GET_TDC
+ * - struct gs_device_tdc_const
+ * - struct gs_device_tdc
+ */
+#define GS_CAN_FEATURE_TDC								  (1<<17)
+/* device support CAN bus off recovery
+ * - GS_USB_BREQ_BUS_OFF_RECOVERY
+ * - struct gs_device_bus_off_recovery
+ */
+#define GS_CAN_FEATURE_BUS_OFF_RECOVERY					  (1<<18)
 
-#define GS_CAN_FLAG_OVERFLOW					(1<<0)
-#define GS_CAN_FLAG_FD							(1<<1) /* is a CAN-FD frame */
-#define GS_CAN_FLAG_BRS							(1<<2) /* bit rate switch (for CAN-FD frames) */
-#define GS_CAN_FLAG_ESI							(1<<3) /* error state indicator (for CAN-FD frames) */
+#define GS_CAN_FLAG_OVERFLOW							  (1<<0)
+#define GS_CAN_FLAG_FD									  (1<<1) /* is a CAN-FD frame */
+#define GS_CAN_FLAG_BRS									  (1<<2) /* bit rate switch (for CAN-FD frames) */
+#define GS_CAN_FLAG_ESI									  (1<<3) /* error state indicator (for CAN-FD frames) */
 
-#define CAN_EFF_FLAG							0x80000000U /* EFF/SFF is set in the MSB */
-#define CAN_RTR_FLAG							0x40000000U /* remote transmission request */
-#define CAN_ERR_FLAG							0x20000000U /* error message frame */
+#define CAN_EFF_FLAG									  0x80000000U /* EFF/SFF is set in the MSB */
+#define CAN_RTR_FLAG									  0x40000000U /* remote transmission request */
+#define CAN_ERR_FLAG									  0x20000000U /* error message frame */
 
-#define CAN_ERR_DLC								8 /* dlc for error message frames */
+#define CAN_ERR_DLC										  8 /* dlc for error message frames */
 
 /* error class (mask) in can_id */
 #define CAN_ERR_TX_TIMEOUT 0x00000001U   /* TX timeout (by netdevice driver) */
@@ -101,6 +110,8 @@ THE SOFTWARE.
 #define CAN_ERR_BUSOFF	   0x00000040U   /* bus off */
 #define CAN_ERR_BUSERROR   0x00000080U   /* bus error (may flood!) */
 #define CAN_ERR_RESTARTED  0x00000100U   /* controller restarted */
+#define CAN_ERR_CNT		   0x00000200U   /* TX error counter / data[6] */
+                                         /* RX error counter / data[7] */
 
 /* arbitration lost in bit ... / data[0] */
 #define CAN_ERR_LOSTARB_UNSPEC 0x00   /* unspecified */
@@ -181,6 +192,24 @@ enum gs_usb_breq {
 	GS_USB_BREQ_SET_TERMINATION,
 	GS_USB_BREQ_GET_TERMINATION,
 	GS_USB_BREQ_GET_STATE,
+	GS_USB_BREQ_SET_FILTER,
+	GS_USB_BREQ_GET_FILTER,
+	GS_USB_BREQ_GET_TDC_CONST,
+	GS_USB_BREQ_SET_TDC,
+	GS_USB_BREQ_GET_TDC,
+	GS_USB_BREQ_ELM_GET_BOARDINFO = 20,
+	GS_USB_BREQ_ELM_SET_FILTER,
+	GS_USB_BREQ_ELM_GET_LASTERROR,
+	GS_USB_BREQ_ELM_SET_BUSLOADREPORT,
+	GS_USB_BREQ_ELM_SET_PINSTATUS,
+	GS_USB_BREQ_ELM_GET_PINSTATUS,
+	GS_USB_BREQ_ELM_READ_FLASH,
+	GS_USB_BREQ_ELM_WRITE_FLASH,
+	__GS_USB_BREQ_ELM_PLACEHOLDER_28,
+	__GS_USB_BREQ_ELM_PLACEHOLDER_29,
+	__GS_USB_BREQ_ELM_PLACEHOLDER_30,
+	__GS_USB_BREQ_ELM_PLACEHOLDER_31,
+	GS_USB_BREQ_BUS_OFF_RECOVERY = 32,
 };
 
 enum gs_can_mode {
@@ -200,9 +229,13 @@ enum gs_can_state {
 };
 
 enum gs_can_termination_state {
-	GS_CAN_TERMINATION_UNSUPPORTED = -1,    // private, not in kernel enum
 	GS_CAN_TERMINATION_STATE_OFF = 0,
 	GS_CAN_TERMINATION_STATE_ON,
+	GS_CAN_TERMINATION_UNSUPPORTED = 0xffffffff,    // private, not in kernel enum
+};
+
+enum gs_device_filter_dev {
+	GS_DEVICE_FILTER_DEV_BXCAN = 1,         // bxcan, 14 filters
 };
 
 /* data types passed between host and device */
@@ -230,7 +263,7 @@ struct gs_device_config {
 
 struct gs_device_mode {
 	u32 mode;
-	u32 flags;
+	u32 feature;
 } __packed __aligned(4);
 
 struct gs_device_state {
@@ -279,6 +312,54 @@ struct gs_device_termination_state {
 	u32 state;
 } __packed __aligned(4);
 
+struct gs_device_filter_info {
+	u8 dev;         // enum gs_device_filter_dev
+	u8 reserved[3];
+}  __packed __aligned(4);
+
+struct gs_device_filter_bxcan {
+	u32 fs1r;
+	u32 fm1r;
+	u32 ffa1r;
+	u32 fa1r;
+	u32 fr1[14];
+	u32 fr2[14];
+} __packed __aligned(4);
+
+struct gs_device_filter {
+	struct gs_device_filter_info info;
+	union {
+		struct gs_device_filter_bxcan bxcan;
+	};
+} __packed __aligned(4);
+
+enum gs_device_tdc_mode {
+	GS_CAN_TDC_MODE_OFF = BIT(0),
+	GS_CAN_TDC_MODE_AUTO = BIT(1),
+	GS_CAN_TDC_MODE_MANUAL = BIT(2),
+};
+
+struct gs_device_tdc_const {
+	u32 tdcv_min;
+	u32 tdcv_max;
+	u32 tdco_min;
+	u32 tdco_max;
+	u32 tdcf_min;
+	u32 tdcf_max;
+	u32 mode;
+} __packed __aligned(4);
+
+struct gs_device_tdc {
+	u32 tdcv;
+	u32 tdco;
+	u32 tdcf;
+	enum gs_device_tdc_mode mode;
+} __packed __aligned(4);
+
+struct gs_device_bus_off_recovery {
+	u32 unused;
+} __packed __aligned(4);
+
 struct classic_can {
 	u8 data[8];
 } __packed __aligned(4);
@@ -296,6 +377,8 @@ struct canfd_ts {
 	u8 data[64];
 	u32 timestamp_us;
 } __packed __aligned(4);
+
+#define GS_HOST_FRAME_ECHO_ID_RX 0xffffffff
 
 struct gs_host_frame {
 	u32 echo_id;

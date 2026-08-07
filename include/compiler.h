@@ -32,7 +32,8 @@
 #ifndef _LINUXKPI_LINUX_COMPILER_H_
 #define _LINUXKPI_LINUX_COMPILER_H_
 
-#include "util_macro.h"
+#include "zephyr/sys/util.h"
+#include "zephyr/sys/util_macro.h"
 
 #ifndef __aligned
 #define __aligned(x) __attribute__((__aligned__(x)))
@@ -42,10 +43,18 @@
 #define __packed __attribute__((__packed__))
 #endif
 
+#ifndef __maybe_unused
+#define __maybe_unused __attribute__((__unused__))
+#endif
+
 #if __has_attribute(__fallthrough__)
 #define fallthrough __attribute__((__fallthrough__))
 #else
 #define fallthrough do {} while (0) /* fallthrough */
+#endif
+
+#ifndef __weak
+#define __weak __attribute__((weak))
 #endif
 
 #define barrier()	   __asm__ __volatile__ ("" : : : "memory")
@@ -71,9 +80,6 @@
 
 #define lockless_dereference(p) READ_ONCE(p)
 
-#define __same_type(a, b)		__builtin_types_compatible_p(typeof(a), typeof(b))
-#define __must_be_array(a)		__same_type(a, &(a)[0])
-
 #define sizeof_field(_s, _m)	sizeof(((_s *)0)->_m)
 
 #define container_of(ptr, type, member) \
@@ -85,24 +91,57 @@
 #define struct_size(ptr, field, num) \
 		(offsetof(__typeof(*(ptr)), field) + sizeof((ptr)->field[0]) * (num))
 
-#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
-
 #define DECLARE_FLEX_ARRAY(_t, _n) \
 		struct { \
 			struct { } __dummy_ ## _n; \
 			_t _n[0]; \
 		}
 
-#define min(x, y)			((x) < (y) ? (x) : (y))
-#define max(x, y)			((x) > (y) ? (x) : (y))
+#ifndef __struct_group
+#define __struct_group(_tag, _name, _attrs, _members ...) \
+		union { \
+			struct { _members } _attrs; \
+			struct _tag { _members } _attrs _name; \
+		} _attrs
+#endif
 
-#define min3(a, b, c)		min(a, min(b, c))
-#define max3(a, b, c)		max(a, max(b, c))
+#ifndef struct_group
+#define struct_group(_name, _members ...) \
+		__struct_group(/* no tag */, _name, /* no attrs */, _members)
+#endif
 
-#define min4(a, b, c, d)	min(min(a, b), min(c, d))
-#define max4(a, b, c, d)	max(max(a, b), max(b, d))
+#ifndef struct_group_tagged
+#define struct_group_tagged(_tag, _name, _members ...) \
+		__struct_group(_tag, _name, /* no attrs */, _members)
+#endif
 
-#define min5(a, b, c, d, e) min3(min(a, b), min(c, d), e)
-#define max5(a, b, c, d, e) max3(max(a, b), max(b, d), e)
+#define min(x, y) ((x) < (y) ? (x) : (y))
+#define max(x, y) ((x) > (y) ? (x) : (y))
+
+/*
+ * BUILD_BUG_ON() can happen inside functions where _Static_assert() does not
+ * seem to work.  Use old-schoold-ish CTASSERT from before commit
+ * a3085588a88fa58eb5b1eaae471999e1995a29cf but also make sure we do not
+ * end up with an unused typedef or variable. The compiler should optimise
+ * it away entirely.
+ */
+#define _O_CTASSERT(x)				   _O__CTASSERT(x, __LINE__)
+#define _O__CTASSERT(x, y)			   _O___CTASSERT(x, y)
+#define _O___CTASSERT(x, y)			   while (0) { \
+			typedef char __assert_line_ ## y[(x) ? 1 : -1]; \
+			__assert_line_ ## y _x __maybe_unused; \
+			_x[0] = '\0'; \
+}
+
+#define BUILD_BUG()					   do { CTASSERT(0); } while (0)
+#define BUILD_BUG_ON(x)				   do { _O_CTASSERT(!(x)) } while (0)
+#define BUILD_BUG_ON_MSG(x, msg)	   BUILD_BUG_ON(x)
+#define BUILD_BUG_ON_NOT_POWER_OF_2(x) BUILD_BUG_ON(!powerof2(x))
+#define BUILD_BUG_ON_INVALID(expr)	   while (0) { (void)(expr); }
+#define BUILD_BUG_ON_ZERO(x)		   ((int)sizeof(struct { int: -((x) != 0); }))
+
+#undef static_assert
+#define static_assert(x, ...)		 __static_assert(x, ## __VA_ARGS__, #x)
+#define __static_assert(x, msg, ...) _Static_assert(x, msg)
 
 #endif /* _LINUXKPI_LINUX_COMPILER_H_ */
